@@ -1,0 +1,19 @@
+# Core Framework & Web UI
+streamlit>=1.35.0
+
+# PDF Ingestion & Document Processing
+pymupdf>=1.24.0
+
+# Embeddings & Vector Storage
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+
+# LLM Providers
+google-generativeai>=0.7.0
+
+# Configuration & Data Validation
+pydantic>=2.7.0
+python-dotenv>=1.0.1
+
+# Testing & Code Quality
+pytest>=8.2.0
