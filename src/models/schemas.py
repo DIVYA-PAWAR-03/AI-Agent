@@ -4,7 +4,7 @@ Pydantic schemas for structured outputs in the PDF Insight Agent.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -183,3 +183,44 @@ class GroundedAnswer(BaseModel):
         description="True if the answer is grounded in PDF documents, False if information is lacking",
     )
     unsupported_elements_or_notes: Optional[str] = None
+
+
+class TextChunk(BaseModel):
+    """A semantic text chunk with source provenance and metadata."""
+
+    chunk_id: str = Field(description="Unique chunk identifier, e.g. PDF_01_p1_c0")
+    doc_id: str = Field(description="Parent document identifier")
+    filename: str = Field(description="Source PDF filename")
+    page_number: int = Field(description="1-based page number")
+    chunk_index: int = Field(description="0-based chunk index on the page")
+    text: str = Field(description="Chunk text content")
+    char_count: int = Field(default=0, description="Character length of chunk")
+    word_count: int = Field(default=0, description="Word count of chunk")
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Arbitrary additional metadata (e.g. domain, category)"
+    )
+
+
+class RetrievedPassage(BaseModel):
+    """A retrieved text passage with similarity score and citation metadata."""
+
+    chunk_id: str = Field(description="Chunk identifier")
+    doc_id: str = Field(description="Source document identifier")
+    filename: str = Field(description="Source PDF filename")
+    page_number: int = Field(description="1-based page number")
+    text: str = Field(description="Passage text")
+    score: float = Field(description="Normalized similarity score (0.0 to 1.0)")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Chunk metadata")
+
+
+class IndexSummary(BaseModel):
+    """Metadata summary of the ChromaDB vector index."""
+
+    collection_name: str
+    total_chunks: int = 0
+    total_documents: int = 0
+    embedding_model: str
+    persist_directory: str
+    indexed_doc_ids: List[str] = Field(default_factory=list)
+    generated_at: str
+

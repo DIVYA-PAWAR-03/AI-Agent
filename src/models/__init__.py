@@ -11,6 +11,9 @@ from src.models.schemas import (
     DocumentSummary,
     Citation,
     GroundedAnswer,
+    TextChunk,
+    RetrievedPassage,
+    IndexSummary,
 )
 
 __all__ = [
@@ -25,4 +28,7 @@ __all__ = [
     "DocumentSummary",
     "Citation",
     "GroundedAnswer",
+    "TextChunk",
+    "RetrievedPassage",
+    "IndexSummary",
 ]

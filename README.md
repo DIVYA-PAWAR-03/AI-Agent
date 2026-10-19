@@ -13,6 +13,7 @@ The **PDF Document Summarization & Insight Agent** automates this by providing:
 - **2-Line High-Density Insights:** Rapid executive summaries capturing core essence without fluff.
 - **Structured Multi-Section Summaries:** Granular breakdowns of findings, metrics, dates, and recommendations.
 - **Automated Categorization:** Domain identification across AI/Tech, Physics, Biology, Finance/Economics, History, and Earth Sciences.
+- **Semantic Vector Search:** Deep contextual similarity retrieval using Sentence-Transformers & persistent ChromaDB storage.
 - **Document-Grounded Q&A:** Accurate answers supported by verbatim citations and page references.
 - **Multi-Turn Conversational Memory:** Seamless support for contextual follow-up inquiries.
 - **Multi-Document Comparison:** Cross-document comparative synthesis (e.g. comparing quantum computing with classical high-frequency trading).
@@ -32,8 +33,8 @@ flowchart TD
     CatalogBuilder <--> LLM["Configurable LLM Provider (Google Gemini)"]
     CatalogBuilder --> CatalogStore["Document Catalog Store (data/catalog/)"]
     
-    Storage --> Chunker["Semantic Text Chunker & Metadata Extractor"]
-    Chunker --> Embedder["Local Embeddings (Sentence Transformers)"]
+    Storage --> Chunker["Recursive Semantic Text Chunker"]
+    Chunker --> Embedder["Local Embeddings (Sentence Transformers all-MiniLM-L6-v2)"]
     Embedder --> VectorDB["Persistent Vector Database (ChromaDB)"]
     
     User["User Interface (Streamlit / CLI)"] <--> Agent["Agent Orchestrator"]
@@ -48,7 +49,7 @@ flowchart TD
 - **User Interface:** [Streamlit](https://streamlit.io/)
 - **Document Extraction:** [PyMuPDF](https://pymupdf.readthedocs.io/)
 - **Embeddings:** [Sentence-Transformers](https://sbert.net/) (`all-MiniLM-L6-v2`)
-- **Vector Database:** [ChromaDB](https://www.trychroma.com/) (persistent local storage)
+- **Vector Database:** [ChromaDB](https://www.trychroma.com/) (persistent local storage in `./data/chroma_db`)
 - **LLM Provider:** Configurable via Google Gemini (`google-generativeai`)
 - **Validation & Schemas:** [Pydantic v2](https://docs.pydantic.dev/)
 - **Environment Management:** `python-dotenv`
@@ -71,23 +72,29 @@ AI-Agent/
 ├── data/                      # Local runtime data directory (git-ignored)
 │   ├── pdfs/                  # Default local input PDF repository
 │   ├── extracted/             # Generated extraction manifest & document JSONs
-│   └── catalog/               # Generated document catalog & executive insights
+│   ├── catalog/               # Generated document catalog & executive insights
+│   └── chroma_db/             # Persistent ChromaDB vector store
 ├── scripts/
 │   ├── __init__.py
 │   ├── ingest_pdfs.py         # Repeatable PDF ingestion & extraction command
+│   ├── build_index.py         # Repeatable ChromaDB vector indexing & retrieval command
 │   └── analyze_documents.py   # Repeatable document analysis & catalog generation command
 ├── src/
 │   ├── __init__.py
 │   ├── config.py              # Configuration loading, validation, and safe defaults
-│   ├── models/                # Pydantic schemas (Metadata, Insights, Ingestion, Q&A)
+│   ├── models/                # Pydantic schemas (Metadata, Insights, Chunks, Q&A)
 │   │   ├── __init__.py
 │   │   └── schemas.py
 │   ├── ingestion/             # PDF text extraction, cleaning, and pipeline
 │   │   ├── __init__.py
 │   │   ├── loader.py          # PyMuPDF extractor, cleaner & OCR detector
 │   │   └── pipeline.py        # Recursive discovery, stable IDs & manifest
-│   ├── vectorstore/           # ChromaDB indexer and similarity search (Phase 04)
-│   │   └── __init__.py
+│   ├── vectorstore/           # ChromaDB indexer and similarity search
+│   │   ├── __init__.py
+│   │   ├── chunker.py         # Recursive semantic text chunker with overlap
+│   │   ├── embeddings.py      # SentenceTransformers & DeterministicMockEmbeddings
+│   │   ├── chroma.py          # Persistent ChromaVectorStore with cosine search & filtering
+│   │   └── indexer.py         # IndexManager with incremental hash caching
 │   ├── agent/                 # Agent orchestration, LLM service, and catalog builder
 │   │   ├── __init__.py
 │   │   ├── llm_service.py     # Reusable LLM service with rate limits & retries
@@ -100,7 +107,8 @@ AI-Agent/
     ├── test_config.py         # Configuration and credential validation tests
     ├── test_app_setup.py      # App import, CLI execution, and schema tests
     ├── test_ingestion.py      # PDF extraction, OCR detection & pipeline tests
-    └── test_analysis.py       # LLM service, schema validation, caching & error handling
+    ├── test_analysis.py       # LLM service, schema validation, caching & error handling
+    └── test_vectorstore.py    # Chunking, vector storage, indexing, and semantic retrieval
 ```
 
 ---
@@ -148,9 +156,13 @@ CHROMA_PERSIST_DIR=./data/chroma_db
 PDF_DATASET_DIR=./data/pdfs
 EXTRACTED_DATA_DIR=./data/extracted
 CATALOG_DIR=./data/catalog
+CHUNK_SIZE=800
+CHUNK_OVERLAP=150
+RETRIEVAL_TOP_K=5
+RETRIEVAL_MIN_SCORE=0.2
 ```
 
-*(Note: An LLM API key is not required to import the project, run ingestion, run tests, or inspect setup readiness).*
+*(Note: An LLM API key is not required to import the project, run ingestion, build the vector index, or run tests).*
 
 ### 5. Ingest PDF Dataset
 Run the repeatable ingestion command to extract text page-by-page and generate the manifest:
@@ -159,8 +171,25 @@ Run the repeatable ingestion command to extract text page-by-page and generate t
 python -m scripts.ingest_pdfs
 ```
 
-### 6. Analyze Documents & Generate Insights (LLM)
-Once `GEMINI_API_KEY` is added to `.env`, analyze documents and generate the structured catalog:
+### 6. Build Vector Index & Test Semantic Search
+Index extracted passages into persistent ChromaDB storage using local Sentence Transformers:
+
+```bash
+python -m scripts.build_index
+```
+
+You can test semantic retrieval immediately from the command line:
+
+```bash
+# Search all documents
+python -m scripts.build_index --query "What is quantum superposition?"
+
+# Search with document filter
+python -m scripts.build_index --query "What is quantum superposition?" --filter-docs PDF_01,PDF_15
+```
+
+### 7. Analyze Documents & Generate Insights (LLM)
+Once `GEMINI_API_KEY` is configured in `.env`, generate structured catalog entries with 2-line insights:
 
 ```bash
 python -m scripts.analyze_documents
@@ -170,16 +199,15 @@ Options:
 - `--force`: Force re-analysis of all documents even if previously cached.
 - `--limit N`: Analyze only the first N documents (ideal for testing or cost control).
 - `--doc-id ID`: Target a specific document ID (e.g. `--doc-id PDF_01`).
-- `--verbose`: Enable detailed debug output.
 
-### 7. Run Verification & Tests
-Execute automated tests using pytest (all tests use local synthetic fixtures and never call live external APIs):
+### 8. Run Verification & Tests
+Execute automated tests using pytest (all tests use local deterministic fixtures and require zero external API calls):
 
 ```bash
 pytest -v
 ```
 
-### 8. Launch Application
+### 9. Launch Application
 To launch the Streamlit web dashboard:
 
 ```bash
@@ -197,10 +225,11 @@ python app.py
 ## 💰 Cost, Privacy & LLM Provider Guidelines
 
 - **Provider:** Google Gemini API using `gemini-1.5-flash` by default for fast, cost-effective, high-context analysis.
+- **Local Embeddings:** Text embeddings are generated 100% locally on your machine via Sentence Transformers (`all-MiniLM-L6-v2`). No external embedding API calls or costs are incurred for indexing or retrieval!
 - **Free Tier Eligibility:** Google AI Studio offers a free tier supporting up to 15 Requests Per Minute (RPM) and 1,500 Requests Per Day (RPD), allowing the entire 50-document corpus to be analyzed for free.
-- **Incremental Caching:** Every document's SHA-256 hash is tracked. Re-running `python -m scripts.analyze_documents` skips previously analyzed, unchanged documents to eliminate duplicate API calls and minimize token usage.
+- **Incremental Caching:** Every document's SHA-256 hash is tracked for both ingestion, indexing, and LLM analysis. Re-running any script skips unchanged documents, preventing redundant processing.
 - **Privacy & Security:** Local PDF files, vector databases, and `.env` files are ignored by git. API keys are loaded via environment variables and never logged or committed.
-- **Test Isolation:** All automated unit tests utilize local mocks and synthetic temporary documents, guaranteeing zero API cost during test runs.
+- **Test Isolation:** All automated unit tests utilize local mocks and deterministic embedding vectors, guaranteeing zero API cost and sub-second test execution.
 
 ---
 
@@ -213,7 +242,7 @@ python app.py
   - PyMuPDF page-by-page extraction, text cleaning, OCR detection, stable document IDs, idempotency, manifest generation, repeatable CLI command.
 - **Phase 03: Document Analysis & Insight Generation** ✅ *(Completed)*
   - Dedicated LLM service, structured JSON extraction via Gemini, 2-line insights, domain categorization, fact vs interpretation preservation, persistent catalog store with incremental caching.
-- **Phase 04: Vector Indexing & Semantic Search**
-  - Chunking, Sentence-Transformers embeddings, persistent ChromaDB indexing, and similarity retrieval.
-- **Phase 05: Grounded Q&A, Multi-Doc Reasoning & Streamlit UI**
-  - Evidence-backed conversational QA, multi-document comparison, interactive Streamlit demo.
+- **Phase 04: Semantic Retrieval & RAG Knowledge Base** ✅ *(Completed)*
+  - Recursive semantic chunker with overlap, Sentence-Transformers embeddings, persistent ChromaDB indexing, metadata filtering, thresholding, and repeatable search CLI.
+- **Phase 05: Grounded Q&A, Multi-Doc Reasoning & Streamlit Demo UI**
+  - Contextual multi-turn QA, multi-document comparison, evidence citation, and comprehensive interactive Streamlit dashboard.

@@ -41,11 +41,12 @@ secrets/
 *.key
 
 # Vector DB & Runtime Data
-chroma_db/
-vectorstore/
+/chroma_db/
+/vectorstore/
 data/
 *.sqlite3
 *.db
+!src/vectorstore/
 
 # Streamlit
 .streamlit/secrets.toml

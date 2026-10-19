@@ -85,6 +85,23 @@ class AppConfig(BaseModel):
     chroma_persist_dir: Path = Field(
         default_factory=lambda: Path(os.getenv("CHROMA_PERSIST_DIR", "./data/chroma_db"))
     )
+    chroma_collection_name: str = Field(
+        default_factory=lambda: os.getenv("CHROMA_COLLECTION_NAME", "pdf_knowledge_base")
+    )
+
+    # Chunking & RAG Retrieval Configuration
+    chunk_size: int = Field(
+        default_factory=lambda: int(os.getenv("CHUNK_SIZE", "800"))
+    )
+    chunk_overlap: int = Field(
+        default_factory=lambda: int(os.getenv("CHUNK_OVERLAP", "150"))
+    )
+    retrieval_top_k: int = Field(
+        default_factory=lambda: int(os.getenv("RETRIEVAL_TOP_K", "5"))
+    )
+    retrieval_min_score: float = Field(
+        default_factory=lambda: float(os.getenv("RETRIEVAL_MIN_SCORE", "0.2"))
+    )
 
     # Extracted Data Storage Directory
     extracted_data_dir: Path = Field(

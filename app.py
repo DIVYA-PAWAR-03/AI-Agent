@@ -61,6 +61,23 @@ def load_catalog_summary() -> dict:
         return {"catalog_built": False, "analyzed_count": 0, "categories": {}}
 
 
+def load_index_summary_info() -> dict:
+    """Loads vector index status if generated."""
+    manifest_file = config.chroma_persist_dir / "index_manifest.json"
+    if not manifest_file.exists():
+        return {"indexed": False, "total_chunks": 0, "indexed_docs": 0}
+    try:
+        data = json.loads(manifest_file.read_text(encoding="utf-8"))
+        total_chunks = sum(item.get("chunk_count", 0) for item in data.values())
+        return {
+            "indexed": True,
+            "total_chunks": total_chunks,
+            "indexed_docs": len(data),
+        }
+    except Exception:
+        return {"indexed": False, "total_chunks": 0, "indexed_docs": 0}
+
+
 def render_streamlit_ui():
     """Renders the Streamlit setup status interface."""
     import streamlit as st
@@ -80,29 +97,37 @@ def render_streamlit_ui():
     status = config.get_setup_status()
     ingest_info = load_ingestion_manifest_summary()
     catalog_info = load_catalog_summary()
+    index_info = load_index_summary_info()
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("App Version", status["version"])
         st.write(f"**Environment:** `{status['environment']}`")
     with col2:
         pdf_label = "Available" if status["pdf_dataset_found"] else "Missing"
-        st.metric("PDFs Discovered", f"{status['pdf_count']} ({pdf_label})")
-        st.write(f"**Input Dir:** `{status['pdf_dataset_dir']}`")
+        st.metric("PDFs Found", f"{status['pdf_count']} ({pdf_label})")
+        st.write(f"**Input:** `{status['pdf_dataset_dir']}`")
     with col3:
         if ingest_info["ingested"]:
-            st.metric("Extracted Corpus", f"{ingest_info['total_pages']} Pages")
-            st.write(f"**Indexed Docs:** {ingest_info['total_processed']} PDFs")
+            st.metric("Text Corpus", f"{ingest_info['total_pages']} Pages")
+            st.write(f"**Extracted:** {ingest_info['total_processed']} PDFs")
         else:
-            st.metric("Extracted Corpus", "Not Ingested")
-            st.write("Run `python -m scripts.ingest_pdfs`")
+            st.metric("Text Corpus", "Not Ingested")
+            st.write("Run `scripts.ingest_pdfs`")
     with col4:
-        if catalog_info["catalog_built"]:
-            st.metric("Analyzed Catalog", f"{catalog_info['analyzed_count']} Docs")
-            st.write(f"**Domains:** {len(catalog_info['categories'])} Categories")
+        if index_info["indexed"]:
+            st.metric("RAG Vector Index", f"{index_info['total_chunks']} Chunks")
+            st.write(f"**Indexed:** {index_info['indexed_docs']} PDFs")
         else:
-            st.metric("Analyzed Catalog", "Pending")
-            st.write("Run `python -m scripts.analyze_documents`")
+            st.metric("RAG Vector Index", "Not Built")
+            st.write("Run `scripts.build_index`")
+    with col5:
+        if catalog_info["catalog_built"]:
+            st.metric("Insights Catalog", f"{catalog_info['analyzed_count']} Docs")
+            st.write(f"**Domains:** {len(catalog_info['categories'])}")
+        else:
+            st.metric("Insights Catalog", "Pending")
+            st.write("Run `scripts.analyze_documents`")
 
     st.markdown("### Component Readiness Checklist")
 
@@ -125,6 +150,18 @@ def render_streamlit_ui():
         st.info(
             "Ingestion Pipeline: Text extraction pending. "
             "Run `python -m scripts.ingest_pdfs` to process PDFs."
+        )
+
+    # Vector Storage Status
+    if index_info["indexed"]:
+        st.success(
+            f"ChromaDB Vector Store: {index_info['total_chunks']} semantic chunks indexed "
+            f"across {index_info['indexed_docs']} documents using `{config.embedding_model_name}`."
+        )
+    else:
+        st.info(
+            "ChromaDB Vector Store: Index pending. "
+            "Run `python -m scripts.build_index` to generate embeddings."
         )
 
     # Catalog & Insight Status
@@ -150,8 +187,8 @@ def render_streamlit_ui():
 
     st.markdown("---")
     st.info(
-        "Phase 03 Document Analysis & Insight Generation module complete. "
-        "Vector search, multi-doc reasoning, and grounded conversational QA will activate in Phase 04."
+        "Phase 04 Semantic Retrieval & RAG Knowledge Base complete. "
+        "Grounded multi-turn Q&A and cross-document comparison will activate in Phase 05."
     )
 
 
@@ -160,10 +197,11 @@ def main():
     status = config.get_setup_status()
     ingest_info = load_ingestion_manifest_summary()
     catalog_info = load_catalog_summary()
+    index_info = load_index_summary_info()
 
-    print("=" * 60)
+    print("=" * 65)
     print(f" {status['app_name']} (v{status['version']})")
-    print("=" * 60)
+    print("=" * 65)
     print(f"Environment:         {status['environment']}")
     print(f"PDF Dataset Dir:     {status['pdf_dataset_dir']}")
     print(f"PDFs Detected:       {status['pdf_count']}")
@@ -171,6 +209,10 @@ def main():
         print(f"Ingestion Status:    Extracted ({ingest_info['total_processed']} PDFs, {ingest_info['total_pages']} pages)")
     else:
         print("Ingestion Status:    Pending (run: python -m scripts.ingest_pdfs)")
+    if index_info["indexed"]:
+        print(f"Vector Store Status: Indexed ({index_info['total_chunks']} chunks across {index_info['indexed_docs']} PDFs)")
+    else:
+        print("Vector Store Status: Pending (run: python -m scripts.build_index)")
     if catalog_info["catalog_built"]:
         print(f"Catalog Status:      Analyzed ({catalog_info['analyzed_count']} PDFs in {len(catalog_info['categories'])} domains)")
     else:
@@ -181,10 +223,10 @@ def main():
     print(f"Embedding Model:     {status['embedding_model']}")
     print(f"Chroma Storage:      {status['chroma_persist_dir']}")
     print(f"Catalog Storage:     {config.catalog_dir}")
-    print("=" * 60)
+    print("=" * 65)
     print("To launch the Streamlit interface, run:")
     print("  streamlit run app.py")
-    print("=" * 60)
+    print("=" * 65)
 
 
 if __name__ == "__main__":
