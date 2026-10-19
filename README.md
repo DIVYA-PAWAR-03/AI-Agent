@@ -24,8 +24,10 @@ The **PDF Document Summarization & Insight Agent** automates this by providing:
 
 ```mermaid
 flowchart TD
-    PDFs["50 PDF Documents (Details/Pdf_Dataset)"] --> Parser["Document Parser (PyMuPDF)"]
-    Parser --> Chunker["Semantic Text Chunker & Metadata Extractor"]
+    PDFs["50 PDF Documents (data/pdfs/)"] --> Parser["PyMuPDF Document Parser"]
+    Parser --> Cleaner["Text Cleaner & OCR Detector"]
+    Cleaner --> Storage["Extracted Storage & Manifest (data/extracted/)"]
+    Storage --> Chunker["Semantic Text Chunker & Metadata Extractor"]
     Chunker --> Embedder["Local Embeddings (Sentence Transformers)"]
     Embedder --> VectorDB["Persistent Vector Database (ChromaDB)"]
     
@@ -38,7 +40,7 @@ flowchart TD
 ### Stack Components:
 - **Language / Runtime:** Python 3.11+ (tested on Python 3.12.2)
 - **User Interface:** [Streamlit](https://streamlit.io/)
-- **Document Extraction:** [PyMuPDF (fitz)](https://pymupdf.readthedocs.io/)
+- **Document Extraction:** [PyMuPDF](https://pymupdf.readthedocs.io/)
 - **Embeddings:** [Sentence-Transformers](https://sbert.net/) (`all-MiniLM-L6-v2`)
 - **Vector Database:** [ChromaDB](https://www.trychroma.com/) (persistent local storage)
 - **LLM Provider:** Configurable via Google Gemini (`google-generativeai`)
@@ -60,15 +62,23 @@ AI-Agent/
 ├── Details/                   # Source documentation and dataset
 │   ├── Use_Case_Details.docx
 │   └── Pdf_Dataset-20261010T065421Z-1-001/Pdf_Dataset/ (50 PDFs)
+├── data/                      # Local runtime data directory (git-ignored)
+│   ├── pdfs/                  # Default local input PDF repository
+│   └── extracted/             # Generated extraction manifest & document JSONs
+├── scripts/
+│   ├── __init__.py
+│   └── ingest_pdfs.py         # Repeatable PDF ingestion & extraction command
 ├── src/
 │   ├── __init__.py
 │   ├── config.py              # Configuration loading, validation, and safe defaults
-│   ├── models/                # Pydantic schemas (Metadata, Insights, Citations, Q&A)
+│   ├── models/                # Pydantic schemas (Metadata, Insights, Ingestion, Q&A)
 │   │   ├── __init__.py
 │   │   └── schemas.py
-│   ├── ingestion/             # PDF text extraction and semantic chunking (Phase 02)
-│   │   └── __init__.py
-│   ├── vectorstore/           # ChromaDB indexer and similarity search (Phase 02)
+│   ├── ingestion/             # PDF text extraction, cleaning, and pipeline
+│   │   ├── __init__.py
+│   │   ├── loader.py          # PyMuPDF extractor, cleaner & OCR detector
+│   │   └── pipeline.py        # Recursive discovery, stable IDs & manifest
+│   ├── vectorstore/           # ChromaDB indexer and similarity search (Phase 03)
 │   │   └── __init__.py
 │   ├── agent/                 # Agent orchestration and multi-document reasoning
 │   │   └── __init__.py
@@ -78,7 +88,8 @@ AI-Agent/
 └── tests/
     ├── __init__.py
     ├── test_config.py         # Configuration and credential validation tests
-    └── test_app_setup.py      # App import, CLI execution, and schema tests
+    ├── test_app_setup.py      # App import, CLI execution, and schema tests
+    └── test_ingestion.py      # PDF extraction, OCR detection & pipeline tests
 ```
 
 ---
@@ -123,19 +134,32 @@ GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-1.5-flash
 EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
 CHROMA_PERSIST_DIR=./data/chroma_db
-PDF_DATASET_DIR=./Details/Pdf_Dataset-20261010T065421Z-1-001/Pdf_Dataset
+PDF_DATASET_DIR=./data/pdfs
+EXTRACTED_DATA_DIR=./data/extracted
 ```
 
-*(Note: An LLM API key is not required to import the project, run tests, or inspect setup readiness).*
+*(Note: An LLM API key is not required to import the project, run ingestion, run tests, or inspect setup readiness).*
 
-### 5. Run Verification & Tests
+### 5. Ingest PDF Dataset
+Run the repeatable ingestion command to extract text page-by-page and generate the manifest:
+
+```bash
+python -m scripts.ingest_pdfs
+```
+
+Options:
+- `--force`: Force re-extraction of all documents even if previously cached.
+- `--input-dir PATH`: Override input PDF directory.
+- `--output-dir PATH`: Override output storage directory.
+
+### 6. Run Verification & Tests
 Execute automated tests using pytest:
 
 ```bash
 pytest -v
 ```
 
-### 6. Launch Application
+### 7. Launch Application
 To launch the Streamlit web dashboard:
 
 ```bash
@@ -153,11 +177,13 @@ python app.py
 ## 🗺️ Roadmap & Implementation Phases
 
 - **Phase 00: Inspection & Verification** ✅ *(Completed)*
-- **Phase 01: Project Foundation & Architecture** 🚀 *(In Progress / Completed)*
+- **Phase 01: Project Foundation & Architecture** ✅ *(Completed)*
   - Modular project structure, dependency definition, configuration loader, domain models, tests.
-- **Phase 02: Ingestion & Vector Indexing**
-  - PyMuPDF extraction, domain categorizer, semantic chunking, and ChromaDB persistent embedding.
-- **Phase 03: Executive Insight & Summarization Engine**
+- **Phase 02: PDF Ingestion Pipeline** ✅ *(Completed)*
+  - PyMuPDF page-by-page extraction, text cleaning, OCR detection, stable document IDs, idempotency, manifest generation, repeatable CLI command.
+- **Phase 03: Domain Categorization & Vector Indexing**
+  - Topic classifier, semantic chunker, Sentence-Transformers embeddings, ChromaDB persistent storage.
+- **Phase 04: Executive Insight & Summarization Engine**
   - 2-line insight generator, structured summary generator, key metrics & findings extractor.
-- **Phase 04: Grounded Q&A, Multi-Doc Reasoning & UI Demo**
+- **Phase 05: Grounded Q&A, Multi-Doc Reasoning & UI Demo**
   - Evidence-backed conversational QA, multi-document comparison, Streamlit interactive interface.

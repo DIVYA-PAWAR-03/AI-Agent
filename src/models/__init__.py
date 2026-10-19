@@ -1,5 +1,8 @@
 """Pydantic schemas package."""
 from src.models.schemas import (
+    PageExtraction,
+    DocumentExtractionRecord,
+    IngestionManifest,
     DocumentMetadata,
     TwoLineInsight,
     DocumentSummary,
@@ -8,6 +11,9 @@ from src.models.schemas import (
 )
 
 __all__ = [
+    "PageExtraction",
+    "DocumentExtractionRecord",
+    "IngestionManifest",
     "DocumentMetadata",
     "TwoLineInsight",
     "DocumentSummary",
