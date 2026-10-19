@@ -45,6 +45,22 @@ def load_ingestion_manifest_summary() -> dict:
         }
 
 
+def load_catalog_summary() -> dict:
+    """Loads brief summary of the document catalog if generated."""
+    if not config.catalog_file.exists():
+        return {"catalog_built": False, "analyzed_count": 0, "categories": {}}
+    try:
+        data = json.loads(config.catalog_file.read_text(encoding="utf-8"))
+        return {
+            "catalog_built": True,
+            "analyzed_count": data.get("analyzed_count", 0),
+            "categories": data.get("categories", {}),
+            "total_documents": data.get("total_documents", 0),
+        }
+    except Exception:
+        return {"catalog_built": False, "analyzed_count": 0, "categories": {}}
+
+
 def render_streamlit_ui():
     """Renders the Streamlit setup status interface."""
     import streamlit as st
@@ -63,6 +79,7 @@ def render_streamlit_ui():
 
     status = config.get_setup_status()
     ingest_info = load_ingestion_manifest_summary()
+    catalog_info = load_catalog_summary()
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -80,9 +97,12 @@ def render_streamlit_ui():
             st.metric("Extracted Corpus", "Not Ingested")
             st.write("Run `python -m scripts.ingest_pdfs`")
     with col4:
-        api_status = "Configured" if status["gemini_api_key_configured"] else "Key Needed"
-        st.metric("LLM Provider", f"{status['llm_provider']} ({api_status})")
-        st.write(f"**Target Model:** `{status['gemini_model']}`")
+        if catalog_info["catalog_built"]:
+            st.metric("Analyzed Catalog", f"{catalog_info['analyzed_count']} Docs")
+            st.write(f"**Domains:** {len(catalog_info['categories'])} Categories")
+        else:
+            st.metric("Analyzed Catalog", "Pending")
+            st.write("Run `python -m scripts.analyze_documents`")
 
     st.markdown("### Component Readiness Checklist")
 
@@ -107,6 +127,18 @@ def render_streamlit_ui():
             "Run `python -m scripts.ingest_pdfs` to process PDFs."
         )
 
+    # Catalog & Insight Status
+    if catalog_info["catalog_built"]:
+        st.success(
+            f"Catalog Analysis: {catalog_info['analyzed_count']} documents analyzed with 2-line insights "
+            f"across {len(catalog_info['categories'])} domains."
+        )
+    else:
+        st.info(
+            "Document Catalog: Analysis pending. "
+            "Configure GEMINI_API_KEY in `.env` and run `python -m scripts.analyze_documents`."
+        )
+
     # LLM Key Status
     if status["gemini_api_key_configured"]:
         st.success(f"LLM API Key: {status['gemini_status_message']}")
@@ -116,16 +148,10 @@ def render_streamlit_ui():
             "Create a `.env` file from `.env.example` and set `GEMINI_API_KEY`."
         )
 
-    # Vector Storage & Embedding Status
-    st.info(
-        f"**Embeddings Model:** `{status['embedding_model']}`\n\n"
-        f"**ChromaDB Directory:** `{status['chroma_persist_dir']}`"
-    )
-
     st.markdown("---")
     st.info(
-        "Phase 02 PDF Ingestion Pipeline complete. "
-        "Domain categorization, vector indexing, and agent reasoning will activate in subsequent phases."
+        "Phase 03 Document Analysis & Insight Generation module complete. "
+        "Vector search, multi-doc reasoning, and grounded conversational QA will activate in Phase 04."
     )
 
 
@@ -133,6 +159,7 @@ def main():
     """CLI and execution entry point."""
     status = config.get_setup_status()
     ingest_info = load_ingestion_manifest_summary()
+    catalog_info = load_catalog_summary()
 
     print("=" * 60)
     print(f" {status['app_name']} (v{status['version']})")
@@ -144,11 +171,16 @@ def main():
         print(f"Ingestion Status:    Extracted ({ingest_info['total_processed']} PDFs, {ingest_info['total_pages']} pages)")
     else:
         print("Ingestion Status:    Pending (run: python -m scripts.ingest_pdfs)")
+    if catalog_info["catalog_built"]:
+        print(f"Catalog Status:      Analyzed ({catalog_info['analyzed_count']} PDFs in {len(catalog_info['categories'])} domains)")
+    else:
+        print("Catalog Status:      Pending (run: python -m scripts.analyze_documents)")
     print(f"LLM Provider:        {status['llm_provider']} ({status['gemini_model']})")
     print(f"LLM Key Configured:  {status['gemini_api_key_configured']}")
     print(f"Status Note:         {status['gemini_status_message']}")
     print(f"Embedding Model:     {status['embedding_model']}")
     print(f"Chroma Storage:      {status['chroma_persist_dir']}")
+    print(f"Catalog Storage:     {config.catalog_dir}")
     print("=" * 60)
     print("To launch the Streamlit interface, run:")
     print("  streamlit run app.py")

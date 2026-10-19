@@ -27,13 +27,19 @@ flowchart TD
     PDFs["50 PDF Documents (data/pdfs/)"] --> Parser["PyMuPDF Document Parser"]
     Parser --> Cleaner["Text Cleaner & OCR Detector"]
     Cleaner --> Storage["Extracted Storage & Manifest (data/extracted/)"]
+    
+    Storage --> CatalogBuilder["Catalog Builder & Incremental Cache"]
+    CatalogBuilder <--> LLM["Configurable LLM Provider (Google Gemini)"]
+    CatalogBuilder --> CatalogStore["Document Catalog Store (data/catalog/)"]
+    
     Storage --> Chunker["Semantic Text Chunker & Metadata Extractor"]
     Chunker --> Embedder["Local Embeddings (Sentence Transformers)"]
     Embedder --> VectorDB["Persistent Vector Database (ChromaDB)"]
     
     User["User Interface (Streamlit / CLI)"] <--> Agent["Agent Orchestrator"]
     Agent <--> VectorDB
-    Agent <--> LLM["Configurable LLM Provider (Google Gemini)"]
+    Agent <--> CatalogStore
+    Agent <--> LLM
     Agent --> Formatter["Grounded Output & Citations (Pydantic)"]
 ```
 
@@ -64,10 +70,12 @@ AI-Agent/
 │   └── Pdf_Dataset-20261010T065421Z-1-001/Pdf_Dataset/ (50 PDFs)
 ├── data/                      # Local runtime data directory (git-ignored)
 │   ├── pdfs/                  # Default local input PDF repository
-│   └── extracted/             # Generated extraction manifest & document JSONs
+│   ├── extracted/             # Generated extraction manifest & document JSONs
+│   └── catalog/               # Generated document catalog & executive insights
 ├── scripts/
 │   ├── __init__.py
-│   └── ingest_pdfs.py         # Repeatable PDF ingestion & extraction command
+│   ├── ingest_pdfs.py         # Repeatable PDF ingestion & extraction command
+│   └── analyze_documents.py   # Repeatable document analysis & catalog generation command
 ├── src/
 │   ├── __init__.py
 │   ├── config.py              # Configuration loading, validation, and safe defaults
@@ -78,10 +86,12 @@ AI-Agent/
 │   │   ├── __init__.py
 │   │   ├── loader.py          # PyMuPDF extractor, cleaner & OCR detector
 │   │   └── pipeline.py        # Recursive discovery, stable IDs & manifest
-│   ├── vectorstore/           # ChromaDB indexer and similarity search (Phase 03)
+│   ├── vectorstore/           # ChromaDB indexer and similarity search (Phase 04)
 │   │   └── __init__.py
-│   ├── agent/                 # Agent orchestration and multi-document reasoning
-│   │   └── __init__.py
+│   ├── agent/                 # Agent orchestration, LLM service, and catalog builder
+│   │   ├── __init__.py
+│   │   ├── llm_service.py     # Reusable LLM service with rate limits & retries
+│   │   └── catalog_builder.py # Corpus analysis, incremental caching & persistence
 │   └── utils/
 │       ├── __init__.py
 │       └── logger.py          # Formatted logging utility
@@ -89,7 +99,8 @@ AI-Agent/
     ├── __init__.py
     ├── test_config.py         # Configuration and credential validation tests
     ├── test_app_setup.py      # App import, CLI execution, and schema tests
-    └── test_ingestion.py      # PDF extraction, OCR detection & pipeline tests
+    ├── test_ingestion.py      # PDF extraction, OCR detection & pipeline tests
+    └── test_analysis.py       # LLM service, schema validation, caching & error handling
 ```
 
 ---
@@ -136,6 +147,7 @@ EMBEDDING_MODEL_NAME=all-MiniLM-L6-v2
 CHROMA_PERSIST_DIR=./data/chroma_db
 PDF_DATASET_DIR=./data/pdfs
 EXTRACTED_DATA_DIR=./data/extracted
+CATALOG_DIR=./data/catalog
 ```
 
 *(Note: An LLM API key is not required to import the project, run ingestion, run tests, or inspect setup readiness).*
@@ -147,19 +159,27 @@ Run the repeatable ingestion command to extract text page-by-page and generate t
 python -m scripts.ingest_pdfs
 ```
 
-Options:
-- `--force`: Force re-extraction of all documents even if previously cached.
-- `--input-dir PATH`: Override input PDF directory.
-- `--output-dir PATH`: Override output storage directory.
+### 6. Analyze Documents & Generate Insights (LLM)
+Once `GEMINI_API_KEY` is added to `.env`, analyze documents and generate the structured catalog:
 
-### 6. Run Verification & Tests
-Execute automated tests using pytest:
+```bash
+python -m scripts.analyze_documents
+```
+
+Options:
+- `--force`: Force re-analysis of all documents even if previously cached.
+- `--limit N`: Analyze only the first N documents (ideal for testing or cost control).
+- `--doc-id ID`: Target a specific document ID (e.g. `--doc-id PDF_01`).
+- `--verbose`: Enable detailed debug output.
+
+### 7. Run Verification & Tests
+Execute automated tests using pytest (all tests use local synthetic fixtures and never call live external APIs):
 
 ```bash
 pytest -v
 ```
 
-### 7. Launch Application
+### 8. Launch Application
 To launch the Streamlit web dashboard:
 
 ```bash
@@ -174,6 +194,16 @@ python app.py
 
 ---
 
+## 💰 Cost, Privacy & LLM Provider Guidelines
+
+- **Provider:** Google Gemini API using `gemini-1.5-flash` by default for fast, cost-effective, high-context analysis.
+- **Free Tier Eligibility:** Google AI Studio offers a free tier supporting up to 15 Requests Per Minute (RPM) and 1,500 Requests Per Day (RPD), allowing the entire 50-document corpus to be analyzed for free.
+- **Incremental Caching:** Every document's SHA-256 hash is tracked. Re-running `python -m scripts.analyze_documents` skips previously analyzed, unchanged documents to eliminate duplicate API calls and minimize token usage.
+- **Privacy & Security:** Local PDF files, vector databases, and `.env` files are ignored by git. API keys are loaded via environment variables and never logged or committed.
+- **Test Isolation:** All automated unit tests utilize local mocks and synthetic temporary documents, guaranteeing zero API cost during test runs.
+
+---
+
 ## 🗺️ Roadmap & Implementation Phases
 
 - **Phase 00: Inspection & Verification** ✅ *(Completed)*
@@ -181,9 +211,9 @@ python app.py
   - Modular project structure, dependency definition, configuration loader, domain models, tests.
 - **Phase 02: PDF Ingestion Pipeline** ✅ *(Completed)*
   - PyMuPDF page-by-page extraction, text cleaning, OCR detection, stable document IDs, idempotency, manifest generation, repeatable CLI command.
-- **Phase 03: Domain Categorization & Vector Indexing**
-  - Topic classifier, semantic chunker, Sentence-Transformers embeddings, ChromaDB persistent storage.
-- **Phase 04: Executive Insight & Summarization Engine**
-  - 2-line insight generator, structured summary generator, key metrics & findings extractor.
-- **Phase 05: Grounded Q&A, Multi-Doc Reasoning & UI Demo**
-  - Evidence-backed conversational QA, multi-document comparison, Streamlit interactive interface.
+- **Phase 03: Document Analysis & Insight Generation** ✅ *(Completed)*
+  - Dedicated LLM service, structured JSON extraction via Gemini, 2-line insights, domain categorization, fact vs interpretation preservation, persistent catalog store with incremental caching.
+- **Phase 04: Vector Indexing & Semantic Search**
+  - Chunking, Sentence-Transformers embeddings, persistent ChromaDB indexing, and similarity retrieval.
+- **Phase 05: Grounded Q&A, Multi-Doc Reasoning & Streamlit UI**
+  - Evidence-backed conversational QA, multi-document comparison, interactive Streamlit demo.

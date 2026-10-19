@@ -91,6 +91,16 @@ class AppConfig(BaseModel):
         default_factory=lambda: Path(os.getenv("EXTRACTED_DATA_DIR", "./data/extracted"))
     )
 
+    # Catalog Storage Directory
+    catalog_dir: Path = Field(
+        default_factory=lambda: Path(os.getenv("CATALOG_DIR", "./data/catalog"))
+    )
+
+    @property
+    def catalog_file(self) -> Path:
+        """Path to the main document catalog JSON file."""
+        return self.catalog_dir / "document_catalog.json"
+
     # Dataset Location (defaults to data/pdfs per Phase 02 requirements)
     pdf_dataset_dir: Path = Field(
         default_factory=lambda: Path(os.getenv("PDF_DATASET_DIR", "./data/pdfs"))
@@ -148,6 +158,7 @@ class AppConfig(BaseModel):
         self.chroma_persist_dir.mkdir(parents=True, exist_ok=True)
         self.extracted_data_dir.mkdir(parents=True, exist_ok=True)
         self.pdf_dataset_dir.mkdir(parents=True, exist_ok=True)
+        self.catalog_dir.mkdir(parents=True, exist_ok=True)
 
 
 # Global singleton instance for easy import across modules
