@@ -14,6 +14,7 @@ from src.models.schemas import (
     TextChunk,
     RetrievedPassage,
     IndexSummary,
+    AgentResponse,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "TextChunk",
     "RetrievedPassage",
     "IndexSummary",
+    "AgentResponse",
 ]

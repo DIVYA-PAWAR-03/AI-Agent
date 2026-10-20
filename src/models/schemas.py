@@ -224,3 +224,24 @@ class IndexSummary(BaseModel):
     indexed_doc_ids: List[str] = Field(default_factory=list)
     generated_at: str
 
+
+class AgentResponse(BaseModel):
+    """Structured response from the document AI agent."""
+
+    operation: str = Field(description="Classified operation type")
+    query: str = Field(description="The original user query")
+    answer: str = Field(description="The evidence-grounded response text")
+    active_doc_id: Optional[str] = Field(default=None, description="The active or resolved document ID")
+    target_doc_ids: List[str] = Field(default_factory=list, description="All documents referenced in the operation")
+    citations: List[Citation] = Field(default_factory=list, description="Grounding source citations")
+    is_directly_supported: bool = Field(
+        default=True,
+        description="True if the response is directly supported by evidence; False if evidence is insufficient",
+    )
+    distinction_notes: Optional[str] = Field(
+        default=None,
+        description="Distinction between direct factual statements and analytical inferences",
+    )
+    retrieved_passages_count: int = Field(default=0, description="Number of passages retrieved")
+
+
