@@ -1,6 +1,6 @@
 """
 PDF Document Summarization & Insight Agent (UC05)
-Application Entry Point & Setup Dashboard.
+Application Entry Point & Modern Streamlit User Interface.
 """
 
 from __future__ import annotations
@@ -79,117 +79,112 @@ def load_index_summary_info() -> dict:
 
 
 def render_streamlit_ui():
-    """Renders the Streamlit setup status interface."""
+    """Renders the complete Streamlit multi-view interface."""
     import streamlit as st
+
+    from src.ui.analysis_view import render_analysis_view
+    from src.ui.chat_view import render_chat_view
+    from src.ui.dashboard_view import render_dashboard_view
+    from src.ui.explorer_view import render_explorer_view
+    from src.ui.state import init_session_state, load_system_metrics
+    from src.ui.styles import get_custom_css, render_header
 
     st.set_page_config(
         page_title="PDF Insight Agent (UC05)",
         page_icon="📄",
         layout="wide",
+        initial_sidebar_state="expanded",
     )
 
-    st.title("📄 PDF Document Summarization & Insight Agent")
-    st.caption("UC05 — AI-Powered Multi-Domain Document Analysis & Grounded Insights")
+    # Inject modern theme styling
+    st.markdown(get_custom_css(), unsafe_allow_html=True)
 
-    st.markdown("---")
-    st.subheader("System Setup & Environment Status")
+    # Initialize persistent state
+    init_session_state()
+    metrics = load_system_metrics()
 
-    status = config.get_setup_status()
-    ingest_info = load_ingestion_manifest_summary()
-    catalog_info = load_catalog_summary()
-    index_info = load_index_summary_info()
-
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("App Version", status["version"])
-        st.write(f"**Environment:** `{status['environment']}`")
-    with col2:
-        pdf_label = "Available" if status["pdf_dataset_found"] else "Missing"
-        st.metric("PDFs Found", f"{status['pdf_count']} ({pdf_label})")
-        st.write(f"**Input:** `{status['pdf_dataset_dir']}`")
-    with col3:
-        if ingest_info["ingested"]:
-            st.metric("Text Corpus", f"{ingest_info['total_pages']} Pages")
-            st.write(f"**Extracted:** {ingest_info['total_processed']} PDFs")
-        else:
-            st.metric("Text Corpus", "Not Ingested")
-            st.write("Run `scripts.ingest_pdfs`")
-    with col4:
-        if index_info["indexed"]:
-            st.metric("RAG Vector Index", f"{index_info['total_chunks']} Chunks")
-            st.write(f"**Indexed:** {index_info['indexed_docs']} PDFs")
-        else:
-            st.metric("RAG Vector Index", "Not Built")
-            st.write("Run `scripts.build_index`")
-    with col5:
-        if catalog_info["catalog_built"]:
-            st.metric("Insights Catalog", f"{catalog_info['analyzed_count']} Docs")
-            st.write(f"**Domains:** {len(catalog_info['categories'])}")
-        else:
-            st.metric("Insights Catalog", "Pending")
-            st.write("Run `scripts.analyze_documents`")
-
-    st.markdown("### Component Readiness Checklist")
-
-    # Dataset Status
-    if status["pdf_dataset_found"] and status["pdf_count"] > 0:
-        st.success(f"Dataset verified: Found {status['pdf_count']} PDF documents.")
-    else:
-        st.warning(
-            f"Dataset not detected at `{status['pdf_dataset_dir']}`. "
-            "Please ensure PDFs are placed in the configured directory."
-        )
-
-    # Ingestion Pipeline Status
-    if ingest_info["ingested"]:
-        st.success(
-            f"Ingestion Pipeline: Extracted {ingest_info['total_pages']} pages across "
-            f"{ingest_info['total_processed']} documents into `{config.extracted_data_dir}`."
-        )
-    else:
-        st.info(
-            "Ingestion Pipeline: Text extraction pending. "
-            "Run `python -m scripts.ingest_pdfs` to process PDFs."
-        )
-
-    # Vector Storage Status
-    if index_info["indexed"]:
-        st.success(
-            f"ChromaDB Vector Store: {index_info['total_chunks']} semantic chunks indexed "
-            f"across {index_info['indexed_docs']} documents using `{config.embedding_model_name}`."
-        )
-    else:
-        st.info(
-            "ChromaDB Vector Store: Index pending. "
-            "Run `python -m scripts.build_index` to generate embeddings."
-        )
-
-    # Catalog & Insight Status
-    if catalog_info["catalog_built"]:
-        st.success(
-            f"Catalog Analysis: {catalog_info['analyzed_count']} documents analyzed with 2-line insights "
-            f"across {len(catalog_info['categories'])} domains."
-        )
-    else:
-        st.info(
-            "Document Catalog: Analysis pending. "
-            "Configure GEMINI_API_KEY in `.env` and run `python -m scripts.analyze_documents`."
-        )
-
-    # LLM Key Status
-    if status["gemini_api_key_configured"]:
-        st.success(f"LLM API Key: {status['gemini_status_message']}")
-    else:
-        st.info(
-            f"ℹ️ {status['gemini_status_message']}\n\n"
-            "Create a `.env` file from `.env.example` and set `GEMINI_API_KEY`."
-        )
-
-    st.markdown("---")
-    st.info(
-        "Phase 04 Semantic Retrieval & RAG Knowledge Base complete. "
-        "Grounded multi-turn Q&A and cross-document comparison will activate in Phase 05."
+    # Top Brand Header
+    render_header(
+        title="📄 PDF Document Summarization & Insight Agent",
+        subtitle="UC05 — AI-Powered Multi-Domain Document Analysis, Semantic Retrieval & Grounded Insights",
     )
+
+    # -------------------------------------------------------------------------
+    # Sidebar Navigation & Settings
+    # -------------------------------------------------------------------------
+    with st.sidebar:
+        st.markdown("### 🧭 Navigation")
+
+        views = [
+            "📊 Dashboard",
+            "📑 Document Explorer",
+            "💬 AI Chat",
+            "📈 Corpus Analysis",
+        ]
+
+        # Sync selection with session state
+        nav_keys = {
+            "📊 Dashboard": "Dashboard",
+            "📑 Document Explorer": "Document Explorer",
+            "💬 AI Chat": "AI Chat",
+            "📈 Corpus Analysis": "Corpus Analysis",
+        }
+        rev_keys = {v: k for k, v in nav_keys.items()}
+
+        current_view_label = rev_keys.get(st.session_state.current_view, "📊 Dashboard")
+        selected_nav = st.radio(
+            "Select View",
+            options=views,
+            index=views.index(current_view_label) if current_view_label in views else 0,
+            label_visibility="collapsed",
+        )
+        st.session_state.current_view = nav_keys[selected_nav]
+
+        st.markdown("---")
+        st.markdown("### ⚙️ System Status")
+
+        if metrics["api_key_configured"]:
+            st.success("🟢 Gemini API: Connected")
+        else:
+            st.warning("🟡 Gemini API: Missing Key")
+
+        st.caption(f"**Embedding:** `{metrics['embedding_model']}`")
+        st.caption(f"**ChromaDB:** `{metrics['indexed_chunks']:,} chunks`")
+        st.caption(f"**Corpus:** `{metrics['processed']} PDFs ({metrics['total_pages']} pages)`")
+
+        # Optional session key input (kept in-memory, never persisted to disk or logged)
+        with st.expander("🔑 Session API Key Override"):
+            st.caption("Provide an API key for this browser session without modifying `.env`:")
+            session_key = st.text_input(
+                "Gemini API Key",
+                type="password",
+                placeholder="AIzaSy...",
+                key="session_api_key_input",
+            )
+            if st.button("Apply Key to Session", use_container_width=True):
+                if session_key.strip():
+                    import os
+                    os.environ["GEMINI_API_KEY"] = session_key.strip()
+                    config.gemini_api_key = session_key.strip()
+                    st.cache_resource.clear()
+                    st.cache_data.clear()
+                    st.success("Session API key applied!")
+                    st.rerun()
+
+        st.markdown("---")
+        st.caption("v0.1.0 • Antigravity AI Engine")
+
+    # -------------------------------------------------------------------------
+    # View Router
+    # -------------------------------------------------------------------------
+    if st.session_state.current_view == "Dashboard":
+        render_dashboard_view()
+    elif st.session_state.current_view == "Document Explorer":
+        render_explorer_view()
+    elif st.session_state.current_view == "AI Chat":
+        render_chat_view()
+    elif st.session_state.current_view == "Corpus Analysis":
+        render_analysis_view()
 
 
 def main():
